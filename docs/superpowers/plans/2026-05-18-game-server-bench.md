@@ -23,7 +23,7 @@
 - Create: `tests/test_game_server_bench.sh`
 - Create: `game-server-bench.sh`
 
-- [ ] **Step 1: Write the failing CLI tests**
+- [x] **Step 1: Write the failing CLI tests**
 
 Create `tests/test_game_server_bench.sh` with:
 
@@ -103,13 +103,13 @@ main() {
 main "$@"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: FAIL because `game-server-bench.sh` does not exist or has no CLI implementation.
 
-- [ ] **Step 3: Implement minimal CLI skeleton**
+- [x] **Step 3: Implement minimal CLI skeleton**
 
 Create `game-server-bench.sh` with:
 
@@ -287,13 +287,13 @@ main() {
 main "$@"
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: `All tests passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-server-bench.sh tests/test_game_server_bench.sh docs/superpowers/plans/2026-05-18-game-server-bench.md
