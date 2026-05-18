@@ -6,12 +6,17 @@ RUNS_DIR="$SCRIPT_DIR/bench-runs"
 SESSION_NAME="game-server-bench"
 DEFAULT_HOURS=72
 DEFAULT_STREAMS=2
+DEFAULT_IPERF_PORT=5201
+DEFAULT_IPERF_MODE="both"
+DEFAULT_IPERF_MBPS=50
+DEFAULT_IPERF_DURATION=30
+DEFAULT_IPERF_INTERVAL=300
 DEFAULT_PING_TARGETS=("1.1.1.1" "8.8.8.8" "huggingface.co")
 DEFAULT_URLS=(
   "https://huggingface.co/gpt2/resolve/main/pytorch_model.bin"
   "https://huggingface.co/bert-base-uncased/resolve/main/pytorch_model.bin"
 )
-REQUIRED_PACKAGES=(stress-ng curl iputils-ping sysstat mtr-tiny tmux bc coreutils gawk iproute2)
+REQUIRED_PACKAGES=(stress-ng curl iputils-ping sysstat mtr-tiny tmux bc coreutils gawk iproute2 iperf3)
 required_commands=(stress-ng curl ping sar tmux awk bc ip)
 
 usage() {
@@ -19,6 +24,7 @@ usage() {
 Usage:
   sudo ./game-server-bench.sh install
   sudo ./game-server-bench.sh start [--hours N] [--cpu PERCENT] [--download-mbps MBPS] [--streams N] [--url URL]
+  sudo ./game-server-bench.sh start --iperf-host HOST [--iperf-mode MODE] [--iperf-mbps MBPS]
   ./game-server-bench.sh status
   ./game-server-bench.sh logs [RUN_DIR]
   sudo ./game-server-bench.sh stop
@@ -38,6 +44,12 @@ Options for start:
   --download-mbps N  Observation target for download throughput.
   --streams N        Parallel download workers. Default: 2.
   --url URL          Add a download URL. Can be repeated.
+  --iperf-host HOST  Enable iperf3 tests against a server you control.
+  --iperf-port PORT  iperf3 server port. Default: 5201.
+  --iperf-mode MODE  tcp, udp, both, tcp-up, tcp-down, udp-up, or udp-down. Default: both.
+  --iperf-mbps N     UDP target bandwidth in Mbps. Default: 50.
+  --iperf-duration N Seconds per iperf3 sample. Default: 30.
+  --iperf-interval N Seconds between iperf3 cycles. Default: 300.
 USAGE
 }
 
@@ -64,6 +76,13 @@ check_required_commands() {
       command_exists "$command_name" || die "Missing required command: $command_name. Run: sudo ./game-server-bench.sh install"
     fi
   done
+  if [[ -n "${IPERF_HOST:-}" ]]; then
+    if [[ -n "$path_prefix" ]]; then
+      PATH="$path_prefix" command -v iperf3 >/dev/null 2>&1 || die "Missing required command: iperf3. Run: sudo ./game-server-bench.sh install"
+    else
+      command_exists iperf3 || die "Missing required command: iperf3. Run: sudo ./game-server-bench.sh install"
+    fi
+  fi
 }
 
 session_running() {
@@ -88,6 +107,12 @@ write_config() {
     printf 'CPU_TARGET=%q\n' "$CPU_TARGET"
     printf 'DOWNLOAD_TARGET_MBPS=%q\n' "$DOWNLOAD_TARGET_MBPS"
     printf 'STREAMS=%q\n' "$STREAMS"
+    printf 'IPERF_HOST=%q\n' "$IPERF_HOST"
+    printf 'IPERF_PORT=%q\n' "$IPERF_PORT"
+    printf 'IPERF_MODE=%q\n' "$IPERF_MODE"
+    printf 'IPERF_MBPS=%q\n' "$IPERF_MBPS"
+    printf 'IPERF_DURATION=%q\n' "$IPERF_DURATION"
+    printf 'IPERF_INTERVAL=%q\n' "$IPERF_INTERVAL"
     printf 'URLS=('
     local url
     for url in "${URLS[@]}"; do
@@ -122,6 +147,12 @@ parse_start_args() {
   CPU_TARGET=""
   DOWNLOAD_TARGET_MBPS=""
   STREAMS="$DEFAULT_STREAMS"
+  IPERF_HOST=""
+  IPERF_PORT="$DEFAULT_IPERF_PORT"
+  IPERF_MODE="$DEFAULT_IPERF_MODE"
+  IPERF_MBPS="$DEFAULT_IPERF_MBPS"
+  IPERF_DURATION="$DEFAULT_IPERF_DURATION"
+  IPERF_INTERVAL="$DEFAULT_IPERF_INTERVAL"
   URLS=()
   DRY_RUN=0
 
@@ -152,6 +183,36 @@ parse_start_args() {
         URLS+=("$2")
         shift 2
         ;;
+      --iperf-host)
+        [[ $# -ge 2 ]] || die "--iperf-host requires a value"
+        IPERF_HOST="$2"
+        shift 2
+        ;;
+      --iperf-port)
+        [[ $# -ge 2 ]] || die "--iperf-port requires a value"
+        IPERF_PORT="$2"
+        shift 2
+        ;;
+      --iperf-mode)
+        [[ $# -ge 2 ]] || die "--iperf-mode requires a value"
+        IPERF_MODE="$2"
+        shift 2
+        ;;
+      --iperf-mbps)
+        [[ $# -ge 2 ]] || die "--iperf-mbps requires a value"
+        IPERF_MBPS="$2"
+        shift 2
+        ;;
+      --iperf-duration)
+        [[ $# -ge 2 ]] || die "--iperf-duration requires a value"
+        IPERF_DURATION="$2"
+        shift 2
+        ;;
+      --iperf-interval)
+        [[ $# -ge 2 ]] || die "--iperf-interval requires a value"
+        IPERF_INTERVAL="$2"
+        shift 2
+        ;;
       --dry-run)
         DRY_RUN=1
         shift
@@ -175,6 +236,15 @@ parse_start_args() {
     is_positive_int "$DOWNLOAD_TARGET_MBPS" || die "--download-mbps must be >= 1"
   fi
   is_positive_int "$STREAMS" || die "--streams must be >= 1"
+  is_positive_int "$IPERF_PORT" || die "--iperf-port must be between 1 and 65535"
+  ((IPERF_PORT >= 1 && IPERF_PORT <= 65535)) || die "--iperf-port must be between 1 and 65535"
+  case "$IPERF_MODE" in
+    tcp|udp|both|tcp-up|tcp-down|udp-up|udp-down) ;;
+    *) die "--iperf-mode must be one of: tcp, udp, both, tcp-up, tcp-down, udp-up, udp-down" ;;
+  esac
+  is_positive_int "$IPERF_MBPS" || die "--iperf-mbps must be >= 1"
+  is_positive_int "$IPERF_DURATION" || die "--iperf-duration must be >= 1"
+  [[ "$IPERF_INTERVAL" =~ ^[0-9]+$ ]] || die "--iperf-interval must be >= 0"
   if ((${#URLS[@]} == 0)); then
     URLS=("${DEFAULT_URLS[@]}")
   fi
@@ -195,7 +265,7 @@ cmd_install() {
 
   [[ "$(id -u)" -eq 0 ]] || die "install must be run with sudo"
   apt-get update
-  apt-get install -y "${REQUIRED_PACKAGES[@]}"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "${REQUIRED_PACKAGES[@]}"
 }
 
 cmd_start() {
@@ -273,6 +343,15 @@ cmd_report() {
     [[ -f "$run_dir/config.env" ]] && echo "Config: $run_dir/config.env"
     echo "Average download Mbps: $avg_mbps"
     echo "Download failures: $failures"
+    if [[ -f "$run_dir/iperf.log" ]]; then
+      echo "iperf average Mbps: $(average_iperf_mbps "$run_dir/iperf.log")"
+      echo "iperf failures: $(iperf_failures "$run_dir/iperf.log")"
+      local mode loss
+      for mode in tcp-up tcp-down udp-up udp-down; do
+        loss="$(iperf_mode_loss "$run_dir/iperf.log" "$mode")"
+        [[ -n "$loss" ]] && echo "$mode packet loss: $loss%"
+      done
+    fi
     local ping_file target loss avg
     for ping_file in "$run_dir"/ping-*.log; do
       [[ -f "$ping_file" ]] || continue
@@ -342,6 +421,67 @@ ping_avg() {
   }' "$file" | tail -n 1
 }
 
+average_iperf_mbps() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "0.00"; return 0; }
+  awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^bandwidth_mbps=/) {
+          split($i, a, "=")
+          total += a[2]
+          count += 1
+        }
+      }
+    }
+    END {
+      if (count == 0) printf "0.00"; else printf "%.2f", total / count
+    }
+  ' "$file"
+}
+
+iperf_failures() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "0"; return 0; }
+  awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^code=/) {
+          split($i, a, "=")
+          if (a[2] != "0") failures += 1
+        }
+      }
+    }
+    END { printf "%d", failures }
+  ' "$file"
+}
+
+iperf_mode_loss() {
+  local file="$1"
+  local wanted_mode="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v wanted_mode="$wanted_mode" '
+    {
+      mode = ""
+      loss = ""
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^mode=/) {
+          split($i, a, "=")
+          mode = a[2]
+        }
+        if ($i ~ /^loss_percent=/) {
+          split($i, b, "=")
+          loss = b[2]
+        }
+      }
+      if (mode == wanted_mode && loss != "") {
+        latest = loss
+      }
+    }
+    END { if (latest != "") print latest }
+  ' "$file"
+}
+
 start_background_session() {
   local run_dir="$1"
   session_running && die "Benchmark session already running: $SESSION_NAME"
@@ -406,6 +546,125 @@ run_sar_worker() {
   WORKER_PIDS+=("$!")
 }
 
+iperf_modes_for_config() {
+  case "${IPERF_MODE:-both}" in
+    tcp)
+      echo "tcp-up tcp-down"
+      ;;
+    udp)
+      echo "udp-up udp-down"
+      ;;
+    both)
+      echo "tcp-up tcp-down udp-up udp-down"
+      ;;
+    tcp-up|tcp-down|udp-up|udp-down)
+      echo "$IPERF_MODE"
+      ;;
+  esac
+}
+
+extract_iperf_bandwidth_mbps() {
+  local file="$1"
+  awk '
+    function convert(value, unit) {
+      if (unit ~ /^Kbits\/sec$/) return value / 1000
+      if (unit ~ /^Mbits\/sec$/) return value
+      if (unit ~ /^Gbits\/sec$/) return value * 1000
+      if (unit ~ /^Tbits\/sec$/) return value * 1000000
+      return value
+    }
+    $0 ~ /bits\/sec/ {
+      for (i = 2; i <= NF; i++) {
+        if ($i ~ /bits\/sec$/ && $(i - 1) ~ /^[0-9.]+$/) {
+          result = convert($(i - 1), $i)
+        }
+      }
+    }
+    END {
+      if (result == "") printf "0.00"; else printf "%.2f", result
+    }
+  ' "$file"
+}
+
+extract_iperf_loss_percent() {
+  local file="$1"
+  awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^\([0-9.]+%\)$/) {
+          gsub(/[()%]/, "", $i)
+          loss = $i
+        }
+      }
+    }
+    END { if (loss != "") print loss }
+  ' "$file"
+}
+
+extract_iperf_jitter_ms() {
+  local file="$1"
+  awk '
+    {
+      for (i = 2; i <= NF; i++) {
+        if ($i == "ms" && $(i - 1) ~ /^[0-9.]+$/) {
+          jitter = $(i - 1)
+        }
+      }
+    }
+    END { if (jitter != "") print jitter }
+  ' "$file"
+}
+
+run_iperf_once() {
+  local mode="$1"
+  local raw_log="$RUN_DIR/iperf-${mode}.raw.log"
+  local tmp_log code bandwidth jitter loss
+  local args=(-c "$IPERF_HOST" -p "$IPERF_PORT" -t "$IPERF_DURATION")
+
+  case "$mode" in
+    tcp-up)
+      args+=(-P "$STREAMS")
+      ;;
+    tcp-down)
+      args+=(-P "$STREAMS" -R)
+      ;;
+    udp-up)
+      args+=(-u -b "${IPERF_MBPS}M")
+      ;;
+    udp-down)
+      args+=(-u -b "${IPERF_MBPS}M" -R)
+      ;;
+  esac
+
+  tmp_log="$(mktemp "$RUN_DIR/tmp-downloads/iperf-${mode}.XXXXXX")"
+  code=0
+  iperf3 "${args[@]}" > "$tmp_log" 2>&1 || code=$?
+  cat "$tmp_log" >> "$raw_log"
+  bandwidth="$(extract_iperf_bandwidth_mbps "$tmp_log")"
+  jitter="$(extract_iperf_jitter_ms "$tmp_log")"
+  loss="$(extract_iperf_loss_percent "$tmp_log")"
+  rm -f "$tmp_log"
+  printf '[%s] mode=%s code=%s bandwidth_mbps=%s jitter_ms=%s loss_percent=%s host=%s port=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$code" "$bandwidth" "$jitter" "$loss" "$IPERF_HOST" "$IPERF_PORT" >> "$RUN_DIR/iperf.log"
+}
+
+run_iperf_worker() {
+  local duration_seconds="$1"
+  (
+    local end_time mode
+    end_time=$(($(date +%s) + duration_seconds))
+    log_main "Starting iperf3 worker against $IPERF_HOST:$IPERF_PORT"
+    while (($(date +%s) < end_time)); do
+      for mode in $(iperf_modes_for_config); do
+        run_iperf_once "$mode"
+      done
+      if ((IPERF_INTERVAL > 0)); then
+        sleep "$IPERF_INTERVAL"
+      fi
+    done
+  ) &
+  WORKER_PIDS+=("$!")
+}
+
 stop_workers() {
   local pid
   for pid in "${WORKER_PIDS[@]:-}"; do
@@ -431,6 +690,9 @@ cmd_internal_run() {
     run_ping_worker "$target"
   done
   run_sar_worker
+  if [[ -n "${IPERF_HOST:-}" ]]; then
+    run_iperf_worker "$duration_seconds"
+  fi
   sleep "$duration_seconds"
   log_main "Benchmark finished"
   stop_workers

@@ -10,10 +10,11 @@ The first version will benchmark:
 
 - CPU capacity and sustained CPU stability.
 - Download-side network throughput using public large model files or other large public files.
+- Controlled bidirectional throughput using `iperf3` when the user has a second server.
 - Network quality using latency, packet loss, and jitter probes.
 - System health signals such as load, memory, disk usage, and network interface counters.
 
-The first version will not benchmark true player traffic patterns or server upload capacity. A proper upload or bidirectional throughput test needs a second machine controlled by the user, for example an `iperf3` server. The design leaves room to add that later.
+The first version still will not emulate true player behavior, but an optional `iperf3` target gives a much better signal for server upload, download, UDP loss, and jitter than public model downloads.
 
 ## User Interface
 
@@ -26,6 +27,7 @@ sudo ./game-server-bench.sh install
 sudo ./game-server-bench.sh start
 sudo ./game-server-bench.sh start --hours 72
 sudo ./game-server-bench.sh start --hours 72 --cpu 80 --download-mbps 300 --streams 4
+sudo ./game-server-bench.sh start --hours 72 --iperf-host 203.0.113.10 --iperf-mode both --iperf-mbps 100
 ./game-server-bench.sh status
 ./game-server-bench.sh logs
 sudo ./game-server-bench.sh stop
@@ -49,6 +51,7 @@ The script will have these responsibilities:
 - Background process supervision through `tmux` or `systemd-run`.
 - CPU worker startup and shutdown.
 - Download worker startup and shutdown.
+- Optional `iperf3` worker startup and shutdown.
 - Latency probe startup and shutdown.
 - System metrics collection.
 - Status, log tailing, stopping, and report generation.
@@ -56,6 +59,7 @@ The script will have these responsibilities:
 The implementation should prefer common Ubuntu packages:
 
 - `stress-ng` for CPU pressure.
+- `iperf3` for controlled TCP and UDP tests against a user-owned target server.
 - `curl` and optionally `aria2` for download tests.
 - `mtr-tiny`, `ping`, and `iproute2` for network checks.
 - `sysstat` for `sar` metrics.
@@ -95,6 +99,23 @@ Safety and politeness constraints:
 - Record HTTP failures, rate limits, DNS failures, and timeouts.
 
 The report should state clearly that this test only reflects reachable public download throughput during the test window.
+
+## Controlled Target Network Test
+
+When the user has another server, the script can run `iperf3` tests against that target. This is preferred over repeatedly downloading public model files for game-server evaluation.
+
+The script should support:
+
+- `--iperf-host <host>` to enable controlled target tests.
+- `--iperf-port <port>` with default `5201`.
+- `--iperf-mode tcp|udp|both|tcp-up|tcp-down|udp-up|udp-down`.
+- `--iperf-mbps <target>` for UDP target bandwidth.
+- `--iperf-duration <seconds>` for each sample.
+- `--iperf-interval <seconds>` between sample cycles.
+
+The worker should log TCP upload, TCP download, UDP upload, and UDP download summaries when mode is `both`. Reports should include average `iperf3` Mbps, failure count, and UDP packet-loss values when available.
+
+The target server must run `iperf3 -s` and expose the selected TCP and UDP port only to trusted source IPs.
 
 ## Network Quality Test
 
@@ -141,6 +162,11 @@ bench-runs/
     main.log
     cpu.log
     download.log
+    iperf.log
+    iperf-tcp-up.raw.log
+    iperf-tcp-down.raw.log
+    iperf-udp-up.raw.log
+    iperf-udp-down.raw.log
     ping-1.1.1.1.log
     ping-8.8.8.8.log
     ping-huggingface.co.log
@@ -155,6 +181,7 @@ The final report should include:
 - Config used.
 - CPU summary.
 - Download throughput summary.
+- Optional `iperf3` throughput and UDP-loss summary.
 - Network latency and packet loss summary.
 - Notable failures.
 - Practical recommendation for game server suitability.
@@ -165,6 +192,7 @@ The script should fail early when:
 
 - It is not running on Linux.
 - Required tools are missing and `install` has not been run.
+- `--iperf-host` is used but `iperf3` is not installed.
 - It cannot create the run directory.
 - Another benchmark session is already running.
 
@@ -190,8 +218,6 @@ Long multi-day verification is not required before delivering the script, but th
 
 Future versions can add:
 
-- `iperf3` bidirectional tests when the user has a second server.
-- UDP packet tests closer to game-server behavior.
 - Region-specific latency targets.
 - Discord, Telegram, or email completion notifications.
 - JSON or CSV output for graphing.

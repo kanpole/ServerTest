@@ -4,9 +4,9 @@
 
 **Goal:** Build a one-script Ubuntu benchmark runner that can install dependencies, run multi-day CPU and download/network observations in the background, and generate logs plus a practical report for game-server suitability.
 
-**Architecture:** `game-server-bench.sh` will be a self-contained Bash script with command dispatch, argument parsing, run directory management, tmux background execution, worker loops, status/log/report commands, and dependency installation. `tests/test_game_server_bench.sh` will be a lightweight Bash test harness that exercises CLI behavior, validation, latest-run detection, report generation from fixtures, and dry-run start behavior without installing packages or performing real long-running stress tests.
+**Architecture:** `game-server-bench.sh` will be a self-contained Bash script with command dispatch, argument parsing, run directory management, tmux background execution, worker loops, status/log/report commands, dependency installation, and optional `iperf3` target-server tests. `tests/test_game_server_bench.sh` will be a lightweight Bash test harness that exercises CLI behavior, validation, latest-run detection, report generation from fixtures, dry-run start behavior, and `iperf3` configuration without performing real long-running stress tests.
 
-**Tech Stack:** Bash, coreutils, `tmux`, `stress-ng`, `curl`, `iputils-ping`, `sysstat`, `mtr-tiny`, `bc`, `awk`, `git`.
+**Tech Stack:** Bash, coreutils, `tmux`, `stress-ng`, `curl`, `iperf3`, `iputils-ping`, `sysstat`, `mtr-tiny`, `bc`, `awk`, `git`.
 
 ---
 
@@ -990,8 +990,38 @@ git add game-server-bench.sh tests/test_game_server_bench.sh docs/superpowers/pl
 git commit -m "Fix benchmark verification issues"
 ```
 
+## Task 7: Controlled iperf3 Target Support
+
+**Files:**
+- Modify: `game-server-bench.sh`
+- Modify: `tests/test_game_server_bench.sh`
+- Modify: `docs/superpowers/specs/2026-05-18-game-server-bench-design.md`
+- Modify: `docs/superpowers/plans/2026-05-18-game-server-bench.md`
+
+- [x] **Step 1: Write failing tests for iperf3 CLI support**
+
+Added tests that require help output to list `--iperf-host` and `--iperf-mode`, require `install --dry-run` to list `iperf3`, validate bad `--iperf-*` arguments, and verify `start --dry-run` writes `IPERF_*` values into `config.env`.
+
+- [x] **Step 2: Write failing tests for conditional iperf3 dependency checks**
+
+Added a fake command path test where base commands exist but `iperf3` is missing. The expected failure is `Missing required command: iperf3` only when `--iperf-host` is supplied.
+
+- [x] **Step 3: Write failing report test for iperf3 summaries**
+
+Added `iperf.log` fixture rows covering `tcp-up`, `tcp-down`, `udp-up`, and `udp-down`, then asserted report output includes average Mbps, failure count, and UDP packet loss.
+
+- [x] **Step 4: Implement iperf3 options, config, worker, and reporting**
+
+Implemented `--iperf-host`, `--iperf-port`, `--iperf-mode`, `--iperf-mbps`, `--iperf-duration`, and `--iperf-interval`. The worker logs summary rows to `iperf.log` and raw command output to per-mode raw logs.
+
+- [x] **Step 5: Run tests to verify they pass**
+
+Run: `bash tests/test_game_server_bench.sh`
+
+Expected: `All tests passed`.
+
 ## Self-Review
 
-- Spec coverage: CLI commands, install, background execution, CPU worker, download worker, ping worker, system metrics collection, status/log/stop/report, default model URLs, configurable targets, multi-day duration, and report caveats are covered.
+- Spec coverage: CLI commands, install, background execution, CPU worker, download worker, optional `iperf3` worker, ping worker, system metrics collection, status/log/stop/report, default model URLs, configurable targets, multi-day duration, and report caveats are covered.
 - Red-flag scan: no unresolved markers or vague implementation instructions remain.
 - Type and naming consistency: command names, function names, file paths, and config names are consistent across tasks.
