@@ -477,7 +477,7 @@ git commit -m "Add dependency install and dry-run start"
 - Modify: `tests/test_game_server_bench.sh`
 - Modify: `game-server-bench.sh`
 
-- [ ] **Step 1: Add failing tests for runner command shape and missing dependency checks**
+- [x] **Step 1: Add failing tests for runner command shape and missing dependency checks**
 
 Append:
 
@@ -498,13 +498,13 @@ test_internal_run_requires_config() {
 
 Call both in `main()`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: FAIL because this task has not added missing dependency checks or `__run` behavior yet.
 
-- [ ] **Step 3: Implement dependency checks, tmux start, and internal runner**
+- [x] **Step 3: Implement dependency checks, tmux start, and internal runner**
 
 Add:
 
@@ -644,13 +644,13 @@ Add command dispatch:
       ;;
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: `All tests passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-server-bench.sh tests/test_game_server_bench.sh docs/superpowers/plans/2026-05-18-game-server-bench.md

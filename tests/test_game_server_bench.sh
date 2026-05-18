@@ -89,12 +89,27 @@ test_start_dry_run_creates_run_config() {
   assert_contains "$config_body" "https://example.com/file.bin"
 }
 
+test_start_requires_dependencies_without_dry_run() {
+  local tmpdir output
+  tmpdir="$(mktemp -d)"
+  output="$(BENCH_BASE_DIR="$tmpdir" BENCH_SKIP_REQUIRE_ROOT=1 BENCH_PATH_OVERRIDE="/nonexistent" run_expect_failure "$SCRIPT" start --hours 1)"
+  assert_contains "$output" "Missing required command"
+}
+
+test_internal_run_requires_config() {
+  local output
+  output="$(run_expect_failure "$SCRIPT" __run /tmp/does-not-exist/config.env)"
+  assert_contains "$output" "Config file not found"
+}
+
 main() {
   test_help_output_lists_commands
   test_invalid_command_fails
   test_invalid_start_arguments_fail
   test_install_dry_run_lists_packages
   test_start_dry_run_creates_run_config
+  test_start_requires_dependencies_without_dry_run
+  test_internal_run_requires_config
   echo "All tests passed"
 }
 

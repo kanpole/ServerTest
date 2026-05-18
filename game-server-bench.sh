@@ -12,6 +12,7 @@ DEFAULT_URLS=(
   "https://huggingface.co/bert-base-uncased/resolve/main/pytorch_model.bin"
 )
 REQUIRED_PACKAGES=(stress-ng curl iputils-ping sysstat mtr-tiny tmux bc coreutils gawk iproute2)
+required_commands=(stress-ng curl ping sar tmux awk bc ip)
 
 usage() {
   cat <<'USAGE'
@@ -51,6 +52,22 @@ is_positive_int() {
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+check_required_commands() {
+  local path_prefix="${BENCH_PATH_OVERRIDE:-}"
+  local command_name
+  for command_name in "${required_commands[@]}"; do
+    if [[ -n "$path_prefix" ]]; then
+      PATH="$path_prefix" command -v "$command_name" >/dev/null 2>&1 || die "Missing required command: $command_name. Run: sudo ./game-server-bench.sh install"
+    else
+      command_exists "$command_name" || die "Missing required command: $command_name. Run: sudo ./game-server-bench.sh install"
+    fi
+  done
+}
+
+session_running() {
+  command_exists tmux && tmux has-session -t "$SESSION_NAME" >/dev/null 2>&1
 }
 
 make_run_dir() {
@@ -178,7 +195,9 @@ cmd_start() {
     return 0
   fi
 
-  die "background start is unavailable until the runner task is complete"
+  [[ "$(id -u)" -eq 0 || "${BENCH_SKIP_REQUIRE_ROOT:-0}" == "1" ]] || die "start must be run with sudo"
+  check_required_commands
+  start_background_session "$run_dir"
 }
 
 cmd_status() {
@@ -195,6 +214,101 @@ cmd_stop() {
 
 cmd_report() {
   die "report command is unavailable in the CLI skeleton"
+}
+
+start_background_session() {
+  local run_dir="$1"
+  session_running && die "Benchmark session already running: $SESSION_NAME"
+  tmux new-session -d -s "$SESSION_NAME" "bash '$SCRIPT_DIR/game-server-bench.sh' __run '$run_dir/config.env'"
+  echo "Started benchmark session: $SESSION_NAME"
+  echo "Run directory: $run_dir"
+}
+
+log_main() {
+  printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$RUN_DIR/main.log"
+}
+
+run_cpu_worker() {
+  local duration_seconds="$1"
+  local args=(--timeout "${duration_seconds}s" --metrics-brief)
+  if [[ -n "${CPU_TARGET:-}" ]]; then
+    args+=(--cpu 0 --cpu-load "$CPU_TARGET")
+  else
+    args+=(--cpu 0)
+  fi
+  log_main "Starting CPU worker"
+  stress-ng "${args[@]}" >"$RUN_DIR/cpu.log" 2>&1 &
+  WORKER_PIDS+=("$!")
+}
+
+run_download_worker() {
+  local worker_id="$1"
+  local duration_seconds="$2"
+  (
+    local end_time index url output code start_ts end_ts bytes elapsed mbps
+    end_time=$(($(date +%s) + duration_seconds))
+    index=0
+    while (($(date +%s) < end_time)); do
+      url="${URLS[$((index % ${#URLS[@]}))]}"
+      output="$RUN_DIR/tmp-downloads/worker-${worker_id}.bin"
+      start_ts="$(date +%s)"
+      code=0
+      curl -L --fail --connect-timeout 20 --max-time 1800 -o "$output" "$url" >>"$RUN_DIR/download-worker-${worker_id}.curl.log" 2>&1 || code=$?
+      end_ts="$(date +%s)"
+      bytes=0
+      [[ -f "$output" ]] && bytes="$(wc -c < "$output")"
+      rm -f "$output"
+      elapsed=$((end_ts - start_ts))
+      ((elapsed < 1)) && elapsed=1
+      mbps="$(awk -v b="$bytes" -v s="$elapsed" 'BEGIN { printf "%.2f", (b * 8) / s / 1000000 }')"
+      printf '[%s] worker=%s code=%s bytes=%s seconds=%s mbps=%s url=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$worker_id" "$code" "$bytes" "$elapsed" "$mbps" "$url" >> "$RUN_DIR/download.log"
+      index=$((index + 1))
+      sleep 5
+    done
+  ) &
+  WORKER_PIDS+=("$!")
+}
+
+run_ping_worker() {
+  local target="$1"
+  ping "$target" > "$RUN_DIR/ping-${target}.log" 2>&1 &
+  WORKER_PIDS+=("$!")
+}
+
+run_sar_worker() {
+  sar -u -r -n DEV 10 > "$RUN_DIR/sar.log" 2>&1 &
+  WORKER_PIDS+=("$!")
+}
+
+stop_workers() {
+  local pid
+  for pid in "${WORKER_PIDS[@]:-}"; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+cmd_internal_run() {
+  local config="${1:-}"
+  [[ -n "$config" && -f "$config" ]] || die "Config file not found: $config"
+  source "$config"
+  WORKER_PIDS=()
+  trap stop_workers EXIT INT TERM
+  local duration_seconds=$((HOURS * 3600))
+  log_main "Benchmark started for ${HOURS} hour(s)"
+  run_cpu_worker "$duration_seconds"
+  local i
+  for ((i = 1; i <= STREAMS; i++)); do
+    run_download_worker "$i" "$duration_seconds"
+  done
+  local target
+  for target in "${PING_TARGETS[@]}"; do
+    run_ping_worker "$target"
+  done
+  run_sar_worker
+  sleep "$duration_seconds"
+  log_main "Benchmark finished"
+  stop_workers
+  "$SCRIPT_DIR/game-server-bench.sh" report "$RUN_DIR" >/dev/null 2>&1 || true
 }
 
 main() {
@@ -226,6 +340,10 @@ main() {
     report)
       shift
       cmd_report "$@"
+      ;;
+    __run)
+      shift
+      cmd_internal_run "$@"
       ;;
     *)
       die "Unknown command: $command_name"
