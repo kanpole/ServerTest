@@ -11,6 +11,7 @@ DEFAULT_URLS=(
   "https://huggingface.co/gpt2/resolve/main/pytorch_model.bin"
   "https://huggingface.co/bert-base-uncased/resolve/main/pytorch_model.bin"
 )
+REQUIRED_PACKAGES=(stress-ng curl iputils-ping sysstat mtr-tiny tmux bc coreutils gawk iproute2)
 
 usage() {
   cat <<'USAGE'
@@ -52,12 +53,46 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+make_run_dir() {
+  local base_dir timestamp run_dir
+  base_dir="${BENCH_BASE_DIR:-$RUNS_DIR}"
+  timestamp="$(date -u +%Y-%m-%d-%H%M%S)"
+  run_dir="$base_dir/$timestamp"
+  mkdir -p "$run_dir/tmp-downloads"
+  printf '%s\n' "$run_dir"
+}
+
+write_config() {
+  local run_dir="$1"
+  local config="$run_dir/config.env"
+  {
+    printf 'RUN_DIR=%q\n' "$run_dir"
+    printf 'HOURS=%q\n' "$HOURS"
+    printf 'CPU_TARGET=%q\n' "$CPU_TARGET"
+    printf 'DOWNLOAD_TARGET_MBPS=%q\n' "$DOWNLOAD_TARGET_MBPS"
+    printf 'STREAMS=%q\n' "$STREAMS"
+    printf 'URLS=('
+    local url
+    for url in "${URLS[@]}"; do
+      printf '%q ' "$url"
+    done
+    printf ')\n'
+    printf 'PING_TARGETS=('
+    local target
+    for target in "${DEFAULT_PING_TARGETS[@]}"; do
+      printf '%q ' "$target"
+    done
+    printf ')\n'
+  } > "$config"
+}
+
 parse_start_args() {
   HOURS="$DEFAULT_HOURS"
   CPU_TARGET=""
   DOWNLOAD_TARGET_MBPS=""
   STREAMS="$DEFAULT_STREAMS"
   URLS=()
+  DRY_RUN=0
 
   while (($#)); do
     case "$1" in
@@ -86,6 +121,10 @@ parse_start_args() {
         URLS+=("$2")
         shift 2
         ;;
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -105,15 +144,41 @@ parse_start_args() {
     is_positive_int "$DOWNLOAD_TARGET_MBPS" || die "--download-mbps must be >= 1"
   fi
   is_positive_int "$STREAMS" || die "--streams must be >= 1"
+  if ((${#URLS[@]} == 0)); then
+    URLS=("${DEFAULT_URLS[@]}")
+  fi
 }
 
 cmd_install() {
-  die "install command is unavailable in the CLI skeleton"
+  local dry_run=0
+  if [[ "${1:-}" == "--dry-run" ]]; then
+    dry_run=1
+    shift
+  fi
+  (($# == 0)) || die "Unknown install option: $1"
+
+  if ((dry_run)); then
+    echo "Would install packages: ${REQUIRED_PACKAGES[*]}"
+    return 0
+  fi
+
+  [[ "$(id -u)" -eq 0 ]] || die "install must be run with sudo"
+  apt-get update
+  apt-get install -y "${REQUIRED_PACKAGES[@]}"
 }
 
 cmd_start() {
   parse_start_args "$@"
-  die "start command is unavailable in the CLI skeleton"
+  local run_dir
+  run_dir="$(make_run_dir)"
+  write_config "$run_dir"
+
+  if ((DRY_RUN)); then
+    echo "Dry run created: $run_dir"
+    return 0
+  fi
+
+  die "background start is unavailable until the runner task is complete"
 }
 
 cmd_status() {

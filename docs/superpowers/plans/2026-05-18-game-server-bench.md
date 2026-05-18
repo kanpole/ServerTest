@@ -306,7 +306,7 @@ git commit -m "Add benchmark CLI skeleton"
 - Modify: `tests/test_game_server_bench.sh`
 - Modify: `game-server-bench.sh`
 
-- [ ] **Step 1: Add failing tests for dependency install command and dry-run start**
+- [x] **Step 1: Add failing tests for dependency install command and dry-run start**
 
 Append these test functions before `main()` and call them from `main()`:
 
@@ -344,13 +344,13 @@ Update `main()` to call:
   test_start_dry_run_creates_run_config
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: FAIL because this task has not added `install --dry-run` or `start --dry-run` behavior yet.
 
-- [ ] **Step 3: Implement install dry-run and start dry-run**
+- [x] **Step 3: Implement install dry-run and start dry-run**
 
 Add package list and helper functions to `game-server-bench.sh`:
 
@@ -458,13 +458,13 @@ cmd_start() {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: `All tests passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-server-bench.sh tests/test_game_server_bench.sh docs/superpowers/plans/2026-05-18-game-server-bench.md

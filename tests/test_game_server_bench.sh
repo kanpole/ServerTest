@@ -63,10 +63,38 @@ test_invalid_start_arguments_fail() {
   assert_contains "$output" "--streams must be >= 1"
 }
 
+test_install_dry_run_lists_packages() {
+  local output
+  output="$(run_expect_success "$SCRIPT" install --dry-run)"
+  assert_contains "$output" "Would install packages:"
+  assert_contains "$output" "stress-ng"
+  assert_contains "$output" "tmux"
+  assert_contains "$output" "sysstat"
+}
+
+test_start_dry_run_creates_run_config() {
+  local tmpdir output run_dir config config_body
+  tmpdir="$(mktemp -d)"
+  output="$(BENCH_BASE_DIR="$tmpdir" run_expect_success "$SCRIPT" start --dry-run --hours 3 --cpu 75 --download-mbps 200 --streams 3 --url https://example.com/file.bin)"
+  assert_contains "$output" "Dry run created:"
+  run_dir="$(printf '%s\n' "$output" | awk -F': ' '/Dry run created:/ {print $2}' | tail -n 1)"
+  [[ -d "$run_dir" ]] || fail "expected run directory to exist: $run_dir"
+  config="$run_dir/config.env"
+  [[ -f "$config" ]] || fail "expected config file: $config"
+  config_body="$(cat "$config")"
+  assert_contains "$config_body" "HOURS=3"
+  assert_contains "$config_body" "CPU_TARGET=75"
+  assert_contains "$config_body" "DOWNLOAD_TARGET_MBPS=200"
+  assert_contains "$config_body" "STREAMS=3"
+  assert_contains "$config_body" "https://example.com/file.bin"
+}
+
 main() {
   test_help_output_lists_commands
   test_invalid_command_fails
   test_invalid_start_arguments_fail
+  test_install_dry_run_lists_packages
+  test_start_dry_run_creates_run_config
   echo "All tests passed"
 }
 
