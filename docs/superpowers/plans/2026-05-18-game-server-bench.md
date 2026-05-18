@@ -940,7 +940,7 @@ git commit -m "Add benchmark report generation"
 - Modify: `game-server-bench.sh` if verification finds an issue.
 - Modify: `tests/test_game_server_bench.sh` if a behavior needs regression coverage.
 
-- [ ] **Step 1: Run syntax and automated tests**
+- [x] **Step 1: Run syntax and automated tests**
 
 Run:
 
@@ -951,7 +951,7 @@ bash tests/test_game_server_bench.sh
 
 Expected: both commands exit 0, and tests print `All tests passed`.
 
-- [ ] **Step 2: Install dependencies if needed**
+- [x] **Step 2: Install dependencies if needed**
 
 Run:
 
@@ -961,7 +961,7 @@ sudo ./game-server-bench.sh install
 
 Expected: `apt-get` completes successfully. If packages are already installed, the command exits successfully without changing behavior.
 
-- [ ] **Step 3: Run a short dry-run**
+- [x] **Step 3: Run a short dry-run**
 
 Run:
 
@@ -971,7 +971,7 @@ sudo ./game-server-bench.sh start --dry-run --hours 1 --cpu 50 --streams 1
 
 Expected: prints `Dry run created: <run_dir>` and creates `config.env`.
 
-- [ ] **Step 4: Run status command**
+- [x] **Step 4: Run status command**
 
 Run:
 
@@ -981,7 +981,7 @@ Run:
 
 Expected: prints `Session:` and the latest run path.
 
-- [ ] **Step 5: Commit verification fixes if any**
+- [x] **Step 5: Commit verification fixes if any**
 
 Only if files changed:
 

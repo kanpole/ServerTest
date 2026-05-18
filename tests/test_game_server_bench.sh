@@ -118,6 +118,16 @@ test_status_reports_not_running() {
   assert_contains "$output" "Session:"
 }
 
+test_status_succeeds_when_latest_run_has_no_main_log() {
+  local tmpdir run_dir output
+  tmpdir="$(mktemp -d)"
+  run_dir="$tmpdir/2026-05-18-120000"
+  mkdir -p "$run_dir"
+  output="$(BENCH_BASE_DIR="$tmpdir" run_expect_success "$SCRIPT" status)"
+  assert_contains "$output" "Session:"
+  assert_contains "$output" "Latest run: $run_dir"
+}
+
 test_report_summarizes_fixture_run() {
   local tmpdir run_dir output
   tmpdir="$(mktemp -d)"
@@ -167,6 +177,7 @@ main() {
   test_internal_run_requires_config
   test_logs_reads_latest_run_main_log
   test_status_reports_not_running
+  test_status_succeeds_when_latest_run_has_no_main_log
   test_report_summarizes_fixture_run
   echo "All tests passed"
 }

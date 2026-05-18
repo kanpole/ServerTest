@@ -223,7 +223,9 @@ cmd_status() {
   local run_dir
   if run_dir="$(latest_run_dir 2>/dev/null)"; then
     echo "Latest run: $run_dir"
-    [[ -f "$run_dir/main.log" ]] && tail -n 10 "$run_dir/main.log"
+    if [[ -f "$run_dir/main.log" ]]; then
+      tail -n 10 "$run_dir/main.log"
+    fi
   else
     echo "Latest run: none"
   fi
