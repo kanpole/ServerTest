@@ -50,7 +50,10 @@ make_fake_command_path() {
 test_help_output_lists_commands() {
   local output
   output="$(run_expect_success "$SCRIPT" --help)"
-  assert_contains "$output" "Usage:"
+  assert_contains "$output" "用法:"
+  assert_contains "$output" "命令:"
+  assert_contains "$output" "start    后台启动压测任务，断开 SSH 后仍会继续运行。"
+  assert_contains "$output" "开始测试选项:"
   assert_contains "$output" "install"
   assert_contains "$output" "start"
   assert_contains "$output" "status"

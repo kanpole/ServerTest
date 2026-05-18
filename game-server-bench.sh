@@ -21,7 +21,7 @@ required_commands=(stress-ng curl ping sar tmux awk bc ip)
 
 usage() {
   cat <<'USAGE'
-Usage:
+用法:
   sudo ./game-server-bench.sh install
   sudo ./game-server-bench.sh start [--hours N] [--cpu PERCENT] [--download-mbps MBPS] [--streams N] [--url URL]
   sudo ./game-server-bench.sh start --iperf-host HOST [--iperf-mode MODE] [--iperf-mbps MBPS]
@@ -30,26 +30,38 @@ Usage:
   sudo ./game-server-bench.sh stop
   ./game-server-bench.sh report [RUN_DIR]
 
-Commands:
-  install  Install Ubuntu packages required by the benchmark.
-  start    Start a background benchmark that survives SSH disconnects.
-  status   Show whether the benchmark session is running and recent logs.
-  logs     Tail the latest or selected benchmark main log.
-  stop     Stop the background benchmark session.
-  report   Generate a summary report for the latest or selected run.
+命令:
+  install  安装压测需要的 Ubuntu 软件包。
+  start    后台启动压测任务，断开 SSH 后仍会继续运行。
+  status   查看压测会话是否运行，以及最近日志。
+  logs     查看最新或指定压测目录的主日志。
+  stop     停止后台压测会话。
+  report   为最新或指定压测目录生成汇总报告。
 
-Options for start:
-  --hours N           Duration in hours. Default: 72.
-  --cpu PERCENT      Target CPU load from 1 to 100. Omit for all-core stress.
-  --download-mbps N  Observation target for download throughput.
-  --streams N        Parallel download workers. Default: 2.
-  --url URL          Add a download URL. Can be repeated.
-  --iperf-host HOST  Enable iperf3 tests against a server you control.
-  --iperf-port PORT  iperf3 server port. Default: 5201.
-  --iperf-mode MODE  tcp, udp, both, tcp-up, tcp-down, udp-up, or udp-down. Default: both.
-  --iperf-mbps N     UDP target bandwidth in Mbps. Default: 50.
-  --iperf-duration N Seconds per iperf3 sample. Default: 30.
-  --iperf-interval N Seconds between iperf3 cycles. Default: 300.
+开始测试选项:
+  --hours N           测试时长，单位小时。默认: 72。
+  --cpu PERCENT      CPU 目标负载，范围 1 到 100。不填则进行全核心压力测试。
+  --download-mbps N  下载吞吐观察目标，单位 Mbps。
+  --streams N        并行下载 worker 数量。默认: 2。
+  --url URL          添加下载测试地址，可重复传入。
+  --iperf-host HOST  启用你自己控制的 iperf3 目标服务器测试。
+  --iperf-port PORT  iperf3 目标服务器端口。默认: 5201。
+  --iperf-mode MODE  tcp、udp、both、tcp-up、tcp-down、udp-up 或 udp-down。默认: both。
+  --iperf-mbps N     UDP 目标带宽，单位 Mbps。默认: 50。
+  --iperf-duration N 每次 iperf3 采样秒数。默认: 30。
+  --iperf-interval N 每轮 iperf3 测试间隔秒数。默认: 300。
+
+常用示例:
+  sudo ./game-server-bench.sh install
+  sudo ./game-server-bench.sh start --hours 72 --cpu 80
+  sudo ./game-server-bench.sh start --hours 72 --iperf-host 目标服务器IP --iperf-mode both --iperf-mbps 100
+  ./game-server-bench.sh status
+  ./game-server-bench.sh report
+
+另一台服务器作为 iperf3 目标:
+  sudo apt update
+  sudo apt install -y iperf3
+  iperf3 -s -p 5201
 USAGE
 }
 
