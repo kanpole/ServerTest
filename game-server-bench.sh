@@ -103,6 +103,20 @@ write_config() {
   } > "$config"
 }
 
+latest_run_dir() {
+  local base_dir="${BENCH_BASE_DIR:-$RUNS_DIR}"
+  [[ -d "$base_dir" ]] || return 1
+  find "$base_dir" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1
+}
+
+resolve_run_dir() {
+  if [[ -n "${1:-}" ]]; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  latest_run_dir || die "No benchmark runs found"
+}
+
 parse_start_args() {
   HOURS="$DEFAULT_HOURS"
   CPU_TARGET=""
@@ -201,15 +215,45 @@ cmd_start() {
 }
 
 cmd_status() {
-  die "status command is unavailable in the CLI skeleton"
+  if session_running; then
+    echo "Session: running ($SESSION_NAME)"
+  else
+    echo "Session: not running ($SESSION_NAME)"
+  fi
+  local run_dir
+  if run_dir="$(latest_run_dir 2>/dev/null)"; then
+    echo "Latest run: $run_dir"
+    [[ -f "$run_dir/main.log" ]] && tail -n 10 "$run_dir/main.log"
+  else
+    echo "Latest run: none"
+  fi
 }
 
 cmd_logs() {
-  die "logs command is unavailable in the CLI skeleton"
+  local follow=1
+  if [[ "${1:-}" == "--no-follow" ]]; then
+    follow=0
+    shift
+  fi
+  local run_dir
+  run_dir="$(resolve_run_dir "${1:-}")"
+  [[ -f "$run_dir/main.log" ]] || die "Main log not found: $run_dir/main.log"
+  if ((follow)); then
+    tail -f "$run_dir/main.log"
+  else
+    cat "$run_dir/main.log"
+  fi
 }
 
 cmd_stop() {
-  die "stop command is unavailable in the CLI skeleton"
+  if session_running; then
+    tmux send-keys -t "$SESSION_NAME" C-c
+    sleep 2
+    tmux kill-session -t "$SESSION_NAME" >/dev/null 2>&1 || true
+    echo "Stopped benchmark session: $SESSION_NAME"
+  else
+    echo "Session not running: $SESSION_NAME"
+  fi
 }
 
 cmd_report() {

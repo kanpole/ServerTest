@@ -102,6 +102,22 @@ test_internal_run_requires_config() {
   assert_contains "$output" "Config file not found"
 }
 
+test_logs_reads_latest_run_main_log() {
+  local tmpdir run_dir output
+  tmpdir="$(mktemp -d)"
+  run_dir="$tmpdir/2026-05-18-120000"
+  mkdir -p "$run_dir"
+  echo "hello log" > "$run_dir/main.log"
+  output="$(BENCH_BASE_DIR="$tmpdir" run_expect_success "$SCRIPT" logs --no-follow)"
+  assert_contains "$output" "hello log"
+}
+
+test_status_reports_not_running() {
+  local output
+  output="$(run_expect_success "$SCRIPT" status)"
+  assert_contains "$output" "Session:"
+}
+
 main() {
   test_help_output_lists_commands
   test_invalid_command_fails
@@ -110,6 +126,8 @@ main() {
   test_start_dry_run_creates_run_config
   test_start_requires_dependencies_without_dry_run
   test_internal_run_requires_config
+  test_logs_reads_latest_run_main_log
+  test_status_reports_not_running
   echo "All tests passed"
 }
 
