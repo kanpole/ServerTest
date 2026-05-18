@@ -118,6 +118,45 @@ test_status_reports_not_running() {
   assert_contains "$output" "Session:"
 }
 
+test_report_summarizes_fixture_run() {
+  local tmpdir run_dir output
+  tmpdir="$(mktemp -d)"
+  run_dir="$tmpdir/2026-05-18-120000"
+  mkdir -p "$run_dir"
+  cat > "$run_dir/config.env" <<'CONFIG'
+RUN_DIR=/tmp/sample
+HOURS=1
+CPU_TARGET=80
+DOWNLOAD_TARGET_MBPS=100
+STREAMS=2
+URLS=(https://example.com/a.bin)
+PING_TARGETS=(1.1.1.1)
+CONFIG
+  cat > "$run_dir/main.log" <<'LOG'
+[2026-05-18T12:00:00Z] Benchmark started for 1 hour(s)
+[2026-05-18T13:00:00Z] Benchmark finished
+LOG
+  cat > "$run_dir/download.log" <<'LOG'
+[2026-05-18T12:01:00Z] worker=1 code=0 bytes=100000000 seconds=10 mbps=80.00 url=https://example.com/a.bin
+[2026-05-18T12:02:00Z] worker=2 code=7 bytes=0 seconds=10 mbps=0.00 url=https://example.com/a.bin
+LOG
+  cat > "$run_dir/ping-1.1.1.1.log" <<'LOG'
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=57 time=10.1 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=57 time=20.2 ms
+
+--- 1.1.1.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+rtt min/avg/max/mdev = 10.100/15.150/20.200/5.050 ms
+LOG
+  output="$(run_expect_success "$SCRIPT" report "$run_dir")"
+  assert_contains "$output" "Game Server Benchmark Report"
+  assert_contains "$output" "Average download Mbps: 40.00"
+  assert_contains "$output" "Download failures: 1"
+  assert_contains "$output" "1.1.1.1 packet loss: 0%"
+  [[ -f "$run_dir/report.txt" ]] || fail "expected report file to be written"
+}
+
 main() {
   test_help_output_lists_commands
   test_invalid_command_fails
@@ -128,6 +167,7 @@ main() {
   test_internal_run_requires_config
   test_logs_reads_latest_run_main_log
   test_status_reports_not_running
+  test_report_summarizes_fixture_run
   echo "All tests passed"
 }
 

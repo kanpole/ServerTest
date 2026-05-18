@@ -778,7 +778,7 @@ git commit -m "Add benchmark status and log commands"
 - Modify: `tests/test_game_server_bench.sh`
 - Modify: `game-server-bench.sh`
 
-- [ ] **Step 1: Add failing report generation test**
+- [x] **Step 1: Add failing report generation test**
 
 Append:
 
@@ -825,13 +825,13 @@ LOG
 
 Call it in `main()`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: FAIL because this task has not added `report` behavior yet.
 
-- [ ] **Step 3: Implement report generation**
+- [x] **Step 3: Implement report generation**
 
 Add:
 
@@ -921,13 +921,13 @@ cmd_report() {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bash tests/test_game_server_bench.sh`
 
 Expected: `All tests passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add game-server-bench.sh tests/test_game_server_bench.sh docs/superpowers/plans/2026-05-18-game-server-bench.md

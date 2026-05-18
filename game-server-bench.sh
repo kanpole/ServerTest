@@ -257,7 +257,87 @@ cmd_stop() {
 }
 
 cmd_report() {
-  die "report command is unavailable in the CLI skeleton"
+  local run_dir
+  run_dir="$(resolve_run_dir "${1:-}")"
+  [[ -d "$run_dir" ]] || die "Run directory not found: $run_dir"
+  local report="$run_dir/report.txt"
+  local avg_mbps failures
+  avg_mbps="$(average_download_mbps "$run_dir/download.log")"
+  failures="$(download_failures "$run_dir/download.log")"
+
+  {
+    echo "Game Server Benchmark Report"
+    echo "Run directory: $run_dir"
+    [[ -f "$run_dir/config.env" ]] && echo "Config: $run_dir/config.env"
+    echo "Average download Mbps: $avg_mbps"
+    echo "Download failures: $failures"
+    local ping_file target loss avg
+    for ping_file in "$run_dir"/ping-*.log; do
+      [[ -f "$ping_file" ]] || continue
+      target="$(basename "$ping_file")"
+      target="${target#ping-}"
+      target="${target%.log}"
+      loss="$(ping_loss "$ping_file")"
+      avg="$(ping_avg "$ping_file")"
+      echo "$target packet loss: ${loss:-unknown}"
+      echo "$target average latency: ${avg:-unknown}"
+    done
+    echo "Recommendation: use low packet loss, stable latency, and sustained CPU behavior as the primary game-server signals. Public model downloads only measure reachable download throughput."
+  } | tee "$report"
+}
+
+average_download_mbps() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "0.00"; return 0; }
+  awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^mbps=/) {
+          split($i, a, "=")
+          total += a[2]
+          count += 1
+        }
+      }
+    }
+    END {
+      if (count == 0) printf "0.00"; else printf "%.2f", total / count
+    }
+  ' "$file"
+}
+
+download_failures() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "0"; return 0; }
+  awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^code=/) {
+          split($i, a, "=")
+          if (a[2] != "0") failures += 1
+        }
+      }
+    }
+    END { printf "%d", failures }
+  ' "$file"
+}
+
+ping_loss() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "unknown"; return 0; }
+  awk -F',' '/packet loss/ {
+    gsub(/^ +| +$/, "", $3)
+    split($3, a, " ")
+    print a[1]
+  }' "$file" | tail -n 1
+}
+
+ping_avg() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "unknown"; return 0; }
+  awk -F' = ' '/rtt min\/avg\/max/ {
+    split($2, a, "/")
+    print a[2] " ms"
+  }' "$file" | tail -n 1
 }
 
 start_background_session() {
